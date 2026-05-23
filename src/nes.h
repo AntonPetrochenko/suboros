@@ -11,6 +11,11 @@
 #define PPU_SCROLL (*(volatile unsigned char *)0x2005)
 #define JOYPAD1    (*(volatile unsigned char *)0x4016)
 
+#define APU_P1_CTRL  (*(volatile unsigned char *)0x4000)
+#define APU_P1_SWEEP (*(volatile unsigned char *)0x4001)
+#define APU_P1_LO    (*(volatile unsigned char *)0x4002)
+#define APU_P1_HI    (*(volatile unsigned char *)0x4003)
+
 #define CTRL_NMI_ON    0x80
 #define MASK_SHOW_SPR  0x10
 #define MASK_SHOW_BG   0x08

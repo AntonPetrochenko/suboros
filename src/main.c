@@ -1,4 +1,5 @@
 #include "nes.h"
+#include "syscall.h"
 
 #define VERSION 5
 
@@ -142,6 +143,13 @@ void main(void) {
     PPU_DATA = '>'; PPU_DATA = ' ';
     PPU_DATA = 'V'; PPU_DATA = 'E'; PPU_DATA = 'R';
     PPU_DATA = ' '; PPU_DATA = (unsigned char)('0' + VERSION);
+
+    SC_BEEP(0xFF, 127);
+
+    {
+        static const char hello[] = "Hello, World!";
+        SC_PRINT(9, 15, hello);
+    }
 
     /* Enable BG rendering now so the tests are visible.
        NMI stays off — no interrupt can corrupt MMC1 shift register writes.

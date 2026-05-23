@@ -1,5 +1,8 @@
 .import _nmi_ready
 .import _frame_count
+.import _put_string
+.import _beep
+.importzp _sc_num
 
 .export nmi_handler, irq_handler
 
@@ -27,6 +30,36 @@
     rti
 .endproc
 
+; BRK and hardware IRQ share this vector. Distinguish by the B flag
+; (bit 4) in the saved P register, which the CPU sets for BRK but not IRQ.
+; After tsx, saved P is at $0104,X:
+;   CPU pushed PCH/PCL/P (SP-=3), we push A/X/Y (SP-=3) → offset = 3+1 = 4
+;   lda $0104,X  ≡  load from $0100 + original_SP - 2  = where P lives.
 .proc irq_handler
+    pha
+    txa
+    pha
+    tya
+    pha
+    tsx
+    lda $0104,x             ; saved P register
+    and #$10                ; B flag set = BRK
+    beq irq_restore         ; pure IRQ — nothing to do
+
+    lda _sc_num
+    cmp #0                  ; SYS_PUT_STRING
+    bne check_beep
+    jsr _put_string
+    jmp irq_restore
+check_beep:
+    cmp #1                  ; SYS_BEEP
+    bne irq_restore
+    jsr _beep
+irq_restore:
+    pla
+    tay
+    pla
+    tax
+    pla
     rti
 .endproc
