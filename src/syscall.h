@@ -1,8 +1,9 @@
 #ifndef SYSCALL_H
 #define SYSCALL_H
 
-#define SYS_PUT_STRING 0
-#define SYS_BEEP       1
+#define SYS_PUT_STRING   0
+#define SYS_BEEP         1
+#define SYS_SET_PRG_BANK 2
 
 /* Syscall parameter registers — five sequential zero-page bytes.
    Caller fills these before executing BRK.
@@ -29,6 +30,11 @@ extern unsigned char sc_p3;
     sc_num = SYS_BEEP; \
     sc_p0  = (unsigned char)(freq); \
     sc_p1  = (unsigned char)(dur); \
+    __asm__("brk #%b", 0)
+
+#define SC_SET_PRG_BANK(bank) \
+    sc_num = SYS_SET_PRG_BANK; \
+    sc_p0  = (unsigned char)(bank); \
     __asm__("brk #%b", 0)
 
 /* Tell cc65 these live in zero page so it can use ZP addressing modes. */

@@ -2,6 +2,7 @@
 .import _frame_count
 .import _put_string
 .import _beep
+.import _set_prg_bank
 .importzp _sc_num
 
 .export nmi_handler, irq_handler
@@ -53,8 +54,13 @@
     jmp irq_restore
 check_beep:
     cmp #1                  ; SYS_BEEP
-    bne irq_restore
+    bne check_set_prg_bank
     jsr _beep
+    jmp irq_restore
+check_set_prg_bank:
+    cmp #2                  ; SYS_SET_PRG_BANK
+    bne irq_restore
+    jsr _set_prg_bank
 irq_restore:
     pla
     tay

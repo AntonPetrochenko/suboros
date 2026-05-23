@@ -11,12 +11,22 @@ void put_string(void) {
     unsigned int addr = 0x2000u + (unsigned int)sc_p1 * 32u + sc_p0;
     unsigned char ch;
 
-    while (!(PPU_STATUS & 0x80));   /* wait for VBlank; also clears w toggle */
+    while (!(PPU_STATUS & 0x80));   /* wait for VBlank */
+    (void)PPU_STATUS;               /* reset address latch (w = 0) */
 
     PPU_ADDR = (unsigned char)(addr >> 8);
     PPU_ADDR = (unsigned char)addr;
     while ((ch = *str++) != '\0')
         PPU_DATA = ch;
+
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+}
+
+/* SC_SET_PRG_BANK — map one of the four 8 KB PRG RAM banks at $6000-$7FFF.
+ * sc_p0 = bank (0-3); writes bits [3:2] of the MMC1 CHR0 register ($A000). */
+void set_prg_bank(void) {
+    mmc1_write_reg(0xA000, (unsigned char)(sc_p0 << 2));
 }
 
 /* SC_BEEP — Pulse 1 beep followed by silence, timed with a spin loop. */

@@ -22,4 +22,8 @@
 #define MASK_LCLIP_SPR 0x04
 #define MASK_LCLIP_BG  0x02
 
+/* Write a 5-bit value to an MMC1 serial register.
+   addr selects the register: $8000=Control $A000=CHR0 $C000=CHR1 $E000=PRG */
+void mmc1_write_reg(unsigned int addr, unsigned char val);
+
 #endif

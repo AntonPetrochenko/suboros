@@ -2,6 +2,8 @@
 #include "syscall.h"
 
 #define VERSION 5
+#define TOSTR_(x) #x
+#define TOSTR(x)  TOSTR_(x)
 
 volatile unsigned char nmi_ready;
 volatile unsigned int  frame_count;
@@ -15,14 +17,14 @@ unsigned char joy1_pressed;
 extern const unsigned char ascii_chr_data[];
 
 static const unsigned char palette_data[32] = {
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
-    0x0F, 0x30, 0x10, 0x00,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
+    0x0F, 0x00, 0x10, 0x30,
 };
 
 static void ppu_wait_vblank(void) {
@@ -80,7 +82,7 @@ static unsigned char hex_nibble(unsigned char n) {
 /* Write a 5-bit value to an MMC1 register via the serial shift register.
    The register is chosen by the address range: $8000=Control, $A000=CHR0,
    $C000=CHR1, $E000=PRG.  No NMI must fire between the five writes. */
-static void mmc1_write_reg(unsigned int addr, unsigned char val) {
+void mmc1_write_reg(unsigned int addr, unsigned char val) {
     volatile unsigned char *p = (volatile unsigned char *)addr;
     *p = val & 1; val >>= 1;
     *p = val & 1; val >>= 1;
@@ -113,47 +115,12 @@ void main(void) {
     load_palette();
     ppu_clear_nt0();
 
-    /* Write all static label content while rendering is off — free VRAM access. */
+    SC_PRINT(1, 1, "> CHR OK");
+    SC_PRINT(1, 2, "> PRG RAM ");
+    SC_PRINT(1, 3, "> EXT ");
+    SC_PRINT(1, 4, "> VER " TOSTR(VERSION));
 
-    /* row 1 col 1 = $2021 */
-    (void)PPU_STATUS;
-    PPU_ADDR = 0x20; PPU_ADDR = 0x21;
-    PPU_DATA = '>'; PPU_DATA = ' ';
-    PPU_DATA = 'C'; PPU_DATA = 'H'; PPU_DATA = 'R';
-    PPU_DATA = ' '; PPU_DATA = 'O'; PPU_DATA = 'K';
-
-    /* row 2 col 1 = $2041: label only; counter ($204B) and result ($204D) filled live */
-    (void)PPU_STATUS;
-    PPU_ADDR = 0x20; PPU_ADDR = 0x41;
-    PPU_DATA = '>'; PPU_DATA = ' ';
-    PPU_DATA = 'P'; PPU_DATA = 'R'; PPU_DATA = 'G';
-    PPU_DATA = ' '; PPU_DATA = 'R'; PPU_DATA = 'A'; PPU_DATA = 'M';
-    PPU_DATA = ' ';
-
-    /* row 3 col 1 = $2061: label only; KB result ($2067) filled live */
-    (void)PPU_STATUS;
-    PPU_ADDR = 0x20; PPU_ADDR = 0x61;
-    PPU_DATA = '>'; PPU_DATA = ' ';
-    PPU_DATA = 'E'; PPU_DATA = 'X'; PPU_DATA = 'T';
-    PPU_DATA = ' ';
-
-    /* row 4 col 1 = $2081: version is static */
-    (void)PPU_STATUS;
-    PPU_ADDR = 0x20; PPU_ADDR = 0x81;
-    PPU_DATA = '>'; PPU_DATA = ' ';
-    PPU_DATA = 'V'; PPU_DATA = 'E'; PPU_DATA = 'R';
-    PPU_DATA = ' '; PPU_DATA = (unsigned char)('0' + VERSION);
-
-    SC_BEEP(0xFF, 127);
-
-    {
-        static const char hello[] = "Hello, World!";
-        SC_PRINT(9, 15, hello);
-    }
-
-    /* Enable BG rendering now so the tests are visible.
-       NMI stays off — no interrupt can corrupt MMC1 shift register writes.
-       All VRAM updates below are gated to VBlank via ppu_wait_vblank(). */
+    /* Set scroll and enable BG so the labels above are visible. */
     (void)PPU_STATUS;
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
@@ -161,9 +128,13 @@ void main(void) {
     ppu_wait_vblank();
     PPU_MASK = MASK_SHOW_BG;
 
+    SC_BEEP(0xFF, 127);
+    SC_PRINT(9, 15, "Hello, World!");
+
     /* ---- PRG RAM POST ---- */
     {
         unsigned char bank, page, pass, page_global;
+        char buf[3];
         volatile unsigned char *ram = (volatile unsigned char *)0x6000;
 
         /* Reset MMC1 shift register, then configure:
@@ -176,9 +147,7 @@ void main(void) {
         pass = 1;
         page_global = 0;
 
-        /* Pass 1: write all banks before reading any back.
-           If two banks are mirrored, the later write will corrupt the earlier
-           one's data, which the verify pass will then catch. */
+        /* Pass 1: write all banks before reading any back. */
         for (bank = 0; bank < 4; bank++) {
             mmc1_write_reg(0xA000, (unsigned char)(bank << 2));
             for (page = 0; page < 32; page++) {
@@ -191,7 +160,7 @@ void main(void) {
             }
         }
 
-        /* Pass 2: verify all banks; update counter on screen each page. */
+        /* Pass 2: verify; update counter on screen each page. */
         for (bank = 0; bank < 4 && pass; bank++) {
             mmc1_write_reg(0xA000, (unsigned char)(bank << 2));
             for (page = 0; page < 32 && pass; page++) {
@@ -208,76 +177,15 @@ void main(void) {
                 } while (i != 0);
                 if (pass) page_global++;
 
-                /* counter update at $204B during VBlank.
-                   ppu_wait_vblank's last PPU_STATUS read resets the latch. */
-                ppu_wait_vblank();
-                PPU_ADDR = 0x20; PPU_ADDR = 0x4B;
-                PPU_DATA = hex_nibble(page_global >> 4);
-                PPU_DATA = hex_nibble(page_global);
-                PPU_SCROLL = 0; PPU_SCROLL = 0;
-                PPU_CTRL = 0;
+                buf[0] = hex_nibble(page_global >> 4);
+                buf[1] = hex_nibble(page_global);
+                buf[2] = '\0';
+                SC_PRINT(11, 2, buf);
             }
         }
 
         mmc1_write_reg(0xA000, 0x00);
-
-        /* write OK/FAIL at $204D during VBlank */
-        ppu_wait_vblank();
-        PPU_ADDR = 0x20; PPU_ADDR = 0x4D;
-        PPU_DATA = ' ';
-        if (pass) {
-            PPU_DATA = 'O'; PPU_DATA = 'K';
-        } else {
-            PPU_DATA = 'F'; PPU_DATA = 'A'; PPU_DATA = 'I'; PPU_DATA = 'L';
-        }
-        PPU_SCROLL = 0; PPU_SCROLL = 0;
-        PPU_CTRL = 0;
-    }
-
-    /* ---- Extended PRG RAM survey ---- */
-    /* Probe banks 4-7 (CHR bit 4) to measure RAM beyond the required 32KB.
-       Never fails; just counts. For each candidate, we save the byte 0 of the
-       bank it would mirror (ext_bank & 3), write a sentinel, then check whether
-       the mirror bank's canary was disturbed. */
-    {
-        volatile unsigned char *ram = (volatile unsigned char *)0x6000;
-        unsigned char ext_bank, ext_count;
-        unsigned char extra_kb;
-
-        ext_count = 0;
-        for (ext_bank = 4; ext_bank < 8; ext_bank++) {
-            unsigned char canary_bank = ext_bank & 3;
-            unsigned char saved_canary;
-            unsigned char sentinel = (unsigned char)(0xA5 ^ ext_bank);
-
-            mmc1_write_reg(0xA000, (unsigned char)(canary_bank << 2));
-            saved_canary = ram[0];
-
-            mmc1_write_reg(0xA000, (unsigned char)(ext_bank << 2));
-            ram[0] = sentinel;
-
-            if (ram[0] != sentinel) break;          /* open bus — no RAM here */
-
-            mmc1_write_reg(0xA000, (unsigned char)(canary_bank << 2));
-            if (ram[0] != saved_canary) {           /* mirror detected */
-                ram[0] = saved_canary;              /* restore clobbered byte */
-                break;
-            }
-
-            ext_count++;
-        }
-
-        mmc1_write_reg(0xA000, 0x00);
-
-        /* write ##K at $2067 during VBlank */
-        extra_kb = (unsigned char)(ext_count << 3);
-        ppu_wait_vblank();
-        PPU_ADDR = 0x20; PPU_ADDR = 0x67;
-        PPU_DATA = hex_nibble(extra_kb >> 4);
-        PPU_DATA = hex_nibble(extra_kb);
-        PPU_DATA = 'K';
-        PPU_SCROLL = 0; PPU_SCROLL = 0;
-        PPU_CTRL = 0;
+        SC_PRINT(13, 2, pass ? " OK" : " FAIL");
     }
 
     ppu_ctrl_shadow = CTRL_NMI_ON;
