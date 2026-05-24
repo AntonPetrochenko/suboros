@@ -41,7 +41,8 @@ def shorten_name(raw: str, used: set) -> str:
     if len(name) <= FS_NAME_LEN:
         candidate = name
     else:
-        candidate = name[:4] + '~' + name[4:7]
+        stripped = name.replace('.', '')
+        candidate = stripped[:4] + '~' + stripped[-3:]
 
     if candidate not in used:
         used.add(candidate)

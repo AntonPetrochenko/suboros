@@ -29,11 +29,12 @@ Because lol.
 ## Features, in somewhat particular order
 
 - [x] Feel out the hardware available - learn to use MMC1 and it's large amount of PRG RAM, which we'll use to reach Commodore 64 levels of RAM, just slower
-- [ ] Make driver model - abstract away hardware, so we can ~~eventually upgrade to Subor SB2000 with floppy drive~~
+- [x] Syscalls to actually do stuff (BRK dispatch, SC_PRINT / SC_BEEP / SC_SET_PRG_BANK)
+- [x] Real file system (SuborFS1: multi-bank extents, mount/open/read/seek/close)
+- [x] File browser shell (D-pad navigation, file viewer). Temporary.
 - [ ] Keyboard driver - support both real Family BASIC and Subor
 - [ ] Proper PPU driver - abstract away the PPU because lmao, make text mode and graphics mode
-- [x] Real file system
-- [x] Syscalls to actually do stuff
+- [ ] Make driver model - abstract away hardware, so we can ~~eventually upgrade to Subor SB2000 with floppy drive~~
 - [ ] Shitass Peripheral Interface
 
 ## Shitass Peripheral Interface (ShPI)
