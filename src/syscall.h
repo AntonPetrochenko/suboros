@@ -5,20 +5,39 @@
 #define SYS_BEEP         1
 #define SYS_SET_PRG_BANK 2
 
-/* Syscall parameter registers — five sequential zero-page bytes.
-   Caller fills these before executing BRK.
-   sc_num: syscall number (SC_* constant above)
-   sc_p0..sc_p3: general-purpose parameters (meaning is syscall-specific) */
+/* Syscall registers in zero page.
+   Caller fills sc_num and sc_p0..p5 before BRK.
+   Syscall handler writes results into sc_rv0..rv3. */
 extern unsigned char sc_num;
 extern unsigned char sc_p0;
 extern unsigned char sc_p1;
 extern unsigned char sc_p2;
 extern unsigned char sc_p3;
+extern unsigned char sc_p4;
+extern unsigned char sc_p5;
+extern unsigned char sc_rv0;
+extern unsigned char sc_rv1;
+extern unsigned char sc_rv2;
+extern unsigned char sc_rv3;
 
+#pragma zpsym ("sc_num")
+#pragma zpsym ("sc_p0")
+#pragma zpsym ("sc_p1")
+#pragma zpsym ("sc_p2")
+#pragma zpsym ("sc_p3")
+#pragma zpsym ("sc_p4")
+#pragma zpsym ("sc_p5")
+#pragma zpsym ("sc_rv0")
+#pragma zpsym ("sc_rv1")
+#pragma zpsym ("sc_rv2")
+#pragma zpsym ("sc_rv3")
+
+/* Split a 16-bit pointer into lo/hi bytes. */
 #define PTR_UNPACK(ptr, lo, hi) \
     (lo) = (unsigned char)((unsigned int)(ptr) & 0xFF); \
     (hi) = (unsigned char)((unsigned int)(ptr) >> 8)
 
+/* Basic syscall macros. */
 #define SC_PRINT(x, y, ptr) \
     sc_num = SYS_PUT_STRING; \
     sc_p0  = (unsigned char)(x); \
@@ -36,12 +55,5 @@ extern unsigned char sc_p3;
     sc_num = SYS_SET_PRG_BANK; \
     sc_p0  = (unsigned char)(bank); \
     __asm__("brk #%b", 0)
-
-/* Tell cc65 these live in zero page so it can use ZP addressing modes. */
-#pragma zpsym ("sc_num")
-#pragma zpsym ("sc_p0")
-#pragma zpsym ("sc_p1")
-#pragma zpsym ("sc_p2")
-#pragma zpsym ("sc_p3")
 
 #endif

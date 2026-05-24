@@ -24,9 +24,12 @@ void put_string(void) {
 }
 
 /* SC_SET_PRG_BANK — map one of the four 8 KB PRG RAM banks at $6000-$7FFF.
- * sc_p0 = bank (0-3); writes bits [3:2] of the MMC1 CHR0 register ($A000). */
+ * sc_p0 = bank (0-3); writes bits [3:2] of the MMC1 CHR0 register ($A000).
+ * Also updates prg_bank_cur so fs_read can save/restore correctly. */
 void set_prg_bank(void) {
+    extern unsigned char prg_bank_cur;
     mmc1_write_reg(0xA000, (unsigned char)(sc_p0 << 2));
+    prg_bank_cur = sc_p0;
 }
 
 /* SC_BEEP — Pulse 1 beep followed by silence, timed with a spin loop. */

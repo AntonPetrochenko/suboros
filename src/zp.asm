@@ -20,10 +20,17 @@ tmp2:    .res 1
 tmp3:    .res 1
 tmp4:    .res 1
 
-.exportzp _sc_num, _sc_p0, _sc_p1, _sc_p2, _sc_p3
+.exportzp _sc_num, _sc_p0, _sc_p1, _sc_p2, _sc_p3, _sc_p4, _sc_p5
+.exportzp _sc_rv0, _sc_rv1, _sc_rv2, _sc_rv3
 
 _sc_num: .res 1
 _sc_p0:  .res 1
 _sc_p1:  .res 1
 _sc_p2:  .res 1
 _sc_p3:  .res 1
+_sc_p4:  .res 1
+_sc_p5:  .res 1
+_sc_rv0: .res 1
+_sc_rv1: .res 1
+_sc_rv2: .res 1
+_sc_rv3: .res 1

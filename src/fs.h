@@ -1,0 +1,182 @@
+#ifndef FS_H
+#define FS_H
+
+#include "syscall.h"
+
+/*
+ * SuborFS1 — multi-bank NES filesystem
+ *
+ * TOC entry (variable length, in fixed bank or device-0 RAM):
+ *   name[8]         null-terminated, zero-padded
+ *   extents[]       SuborFS1Extent, terminated by .bank == 0xFF
+ * TOC itself terminated by entry where name[0] == 0x00.
+ *
+ * PLACEMENT RULE: the TOC pointed to by a mount table entry must live in
+ * the fixed PRG ROM bank ($C000-$FFFF) or in device-0 RAM.  Placing a TOC
+ * in a swappable bank ($8000-$BFFF) is undefined behaviour: fs_read may
+ * switch that bank away mid-operation, making the TOC unreachable.
+ *
+ * Mount table:  $0200, 4 x 3 bytes, device_num $FF = empty slot.
+ * Handle table: $020C, 4 x 3 bytes, mount_slot $FF = free handle.
+ *
+ * Virtual Address (VA): 8-byte user-managed cursor.
+ *   [0] handle index
+ *   [1] cached extent index     \  O(1) sequential read path;
+ *   [2] cached pos lo            >  updated by every read/seek
+ *   [3] cached pos hi           /
+ *   [4] linear offset lo        \  authoritative byte position;
+ *   [5] linear offset mid        >  passed to fs_seek for re-resolve
+ *   [6] linear offset hi        /
+ *   [7] reserved (zero)
+ */
+
+/* Syscall numbers. */
+#define SYS_FS_MOUNT    3
+#define SYS_FS_OPEN     4
+#define SYS_FS_UNMOUNT  5
+#define SYS_FS_STAT     6
+#define SYS_FS_CLOSE    7
+#define SYS_FS_SEEK     8
+#define SYS_FS_READ     9
+#define SYS_FS_GETBYTE  10
+
+#define FS_MAX_MOUNTS   4
+#define FS_NAME_LEN     8
+#define FS_SLOT_EMPTY   0xFF
+#define FS_HANDLE_EMPTY 0xFF
+
+/* Error codes returned in sc_rv3 on failure (sc_rv0 = FS_SLOT_EMPTY).
+   sc_rv3 = 0 (FS_ERR_OK) on success. */
+#define FS_ERR_OK          0
+#define FS_ERR_BAD_SLOT    1   /* slot out of range or empty */
+#define FS_ERR_NO_HANDLE   2   /* all 4 handles already in use */
+#define FS_ERR_NOT_FOUND   3   /* filename not found in TOC */
+#define FS_ERR_BAD_HANDLE  4   /* handle invalid or already free */
+#define FS_ERR_EOF         5   /* seek/read past end of file */
+
+/* Extent: one contiguous chunk of a file within a single PRG ROM bank. */
+typedef struct {
+    unsigned char bank;       /* 0xFF = end-of-list sentinel */
+    unsigned char start_lo;
+    unsigned char start_hi;   /* absolute NES address in this bank's window */
+    unsigned char end_lo;
+    unsigned char end_hi;
+} SuborFS1Extent;             /* 5 bytes */
+
+typedef struct {
+    unsigned char toc_lo;
+    unsigned char toc_hi;
+    unsigned char device_num; /* 0=internal RAM; 0xFF=empty */
+} SuborFS1Mount;
+
+typedef struct {
+    unsigned char mount_slot;   /* 0xFF = handle free */
+    unsigned char extents_lo;   /* ptr to first SuborFS1Extent (just past name[8]) */
+    unsigned char extents_hi;
+} SuborFS1Handle;
+
+extern SuborFS1Mount  fs_mount_table[FS_MAX_MOUNTS];
+extern SuborFS1Handle fs_handle_table[FS_MAX_MOUNTS];
+
+#define FS_MOUNT_TABLE  fs_mount_table
+#define FS_HANDLE_TABLE fs_handle_table
+
+/* Tracks the currently mapped PRG ROM switchable bank ($8000-$BFFF).
+   Must be updated by anyone calling mmc1_write_reg(0xE000, ...). */
+extern unsigned char prg_bank_cur;
+
+/* Call once at startup. */
+void fs_init(void);
+
+/* Syscall handler functions (called from IRQ dispatcher). */
+void fs_mount(void);
+void fs_open(void);
+void fs_unmount(void);
+void fs_stat(void);
+void fs_close(void);
+void fs_seek(void);
+void fs_read(void);
+void fs_getbyte(void);
+
+/* --- Caller macros ---
+ *
+ * SC_FS_MOUNT(toc_ptr, device_num)
+ *   rv0 = slot index, or $FF if table full.
+ *
+ * SC_FS_OPEN(slot, name_ptr, va_ptr)
+ *   va_ptr: pointer to caller's 8-byte VA buffer.
+ *   rv0 = handle (0-3), or $FF if file not found / no free handle.
+ *   On success writes {handle,0,0,0,0,0,0,0} into *va_ptr.
+ *
+ * SC_FS_UNMOUNT(slot)
+ *   rv0 = 0 ok, $FF bad slot. Also frees any open handles for this slot.
+ *
+ * SC_FS_STAT(slot, name_ptr)
+ *   rv0/rv1 = total file size lo/hi (sum of all extents). $FF on error.
+ *
+ * SC_FS_CLOSE(va_ptr)
+ *   rv0 = 0 ok, $FF bad handle. Frees handle and zeroes VA.
+ *
+ * SC_FS_SEEK(va_ptr, linear_offset_24bit)
+ *   linear_offset_24bit: unsigned long, only low 24 bits used.
+ *   Walks extents, resolves to {extent_idx,pos} and writes full VA.
+ *
+ * SC_FS_READ(va_ptr, dest_ptr, n)
+ *   rv0/rv1 = bytes actually copied (may be < n at EOF).
+ *   Updates all 8 VA bytes.
+ *
+ * SC_FS_GETBYTE(va_ptr)
+ *   rv0 = byte value. rv1 = $00 ok, $FF EOF. Updates VA.
+ */
+
+#define SC_FS_MOUNT(toc_ptr, dev) \
+    sc_num = SYS_FS_MOUNT; \
+    PTR_UNPACK((toc_ptr), sc_p0, sc_p1); \
+    sc_p2  = (unsigned char)(dev); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_OPEN(slot, name_ptr, va_ptr) \
+    sc_num = SYS_FS_OPEN; \
+    sc_p0  = (unsigned char)(slot); \
+    PTR_UNPACK((name_ptr), sc_p1, sc_p2); \
+    PTR_UNPACK((va_ptr),   sc_p3, sc_p4); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_UNMOUNT(slot) \
+    sc_num = SYS_FS_UNMOUNT; \
+    sc_p0  = (unsigned char)(slot); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_STAT(slot, name_ptr) \
+    sc_num = SYS_FS_STAT; \
+    sc_p0  = (unsigned char)(slot); \
+    PTR_UNPACK((name_ptr), sc_p1, sc_p2); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_CLOSE(va_ptr) \
+    sc_num = SYS_FS_CLOSE; \
+    PTR_UNPACK((va_ptr), sc_p0, sc_p1); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_SEEK(va_ptr, off24) \
+    sc_num = SYS_FS_SEEK; \
+    PTR_UNPACK((va_ptr), sc_p0, sc_p1); \
+    sc_p2  = (unsigned char)((unsigned long)(off24) & 0xFF); \
+    sc_p3  = (unsigned char)(((unsigned long)(off24) >> 8) & 0xFF); \
+    sc_p4  = (unsigned char)(((unsigned long)(off24) >> 16) & 0xFF); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_READ(va_ptr, dest_ptr, n) \
+    sc_num = SYS_FS_READ; \
+    PTR_UNPACK((va_ptr),   sc_p0, sc_p1); \
+    PTR_UNPACK((dest_ptr), sc_p2, sc_p3); \
+    sc_p4  = (unsigned char)((unsigned int)(n) & 0xFF); \
+    sc_p5  = (unsigned char)((unsigned int)(n) >> 8); \
+    __asm__("brk #%b", 0)
+
+#define SC_FS_GETBYTE(va_ptr) \
+    sc_num = SYS_FS_GETBYTE; \
+    PTR_UNPACK((va_ptr), sc_p0, sc_p1); \
+    __asm__("brk #%b", 0)
+
+#endif

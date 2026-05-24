@@ -42,6 +42,12 @@ if errorlevel 1 goto fail
 %CA65% -o "%BUILD%\syscalls.o" "%BUILD%\syscalls.s"
 if errorlevel 1 goto fail
 
+%CC65% -O -I "%SRC%" -o "%BUILD%\fs.s" "%SRC%\fs.c"
+if errorlevel 1 goto fail
+
+%CA65% -o "%BUILD%\fs.o" "%BUILD%\fs.s"
+if errorlevel 1 goto fail
+
 echo Linking...
 
 %LD65% -C "%CFG%" -o "%OUT%" ^
@@ -52,6 +58,7 @@ echo Linking...
     "%BUILD%\chr_data.o" ^
     "%BUILD%\main.o"     ^
     "%BUILD%\syscalls.o" ^
+    "%BUILD%\fs.o"       ^
     "%~dp0tools\cc65\lib\none.lib"
 if errorlevel 1 goto fail
 

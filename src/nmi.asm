@@ -3,6 +3,14 @@
 .import _put_string
 .import _beep
 .import _set_prg_bank
+.import _fs_mount
+.import _fs_open
+.import _fs_unmount
+.import _fs_stat
+.import _fs_close
+.import _fs_seek
+.import _fs_read
+.import _fs_getbyte
 .importzp _sc_num
 
 .export nmi_handler, irq_handler
@@ -59,8 +67,48 @@ check_beep:
     jmp irq_restore
 check_set_prg_bank:
     cmp #2                  ; SYS_SET_PRG_BANK
-    bne irq_restore
+    bne check_fs_mount
     jsr _set_prg_bank
+    jmp irq_restore
+check_fs_mount:
+    cmp #3                  ; SYS_FS_MOUNT
+    bne check_fs_open
+    jsr _fs_mount
+    jmp irq_restore
+check_fs_open:
+    cmp #4                  ; SYS_FS_OPEN
+    bne check_fs_unmount
+    jsr _fs_open
+    jmp irq_restore
+check_fs_unmount:
+    cmp #5                  ; SYS_FS_UNMOUNT
+    bne check_fs_stat
+    jsr _fs_unmount
+    jmp irq_restore
+check_fs_stat:
+    cmp #6                  ; SYS_FS_STAT
+    bne check_fs_close
+    jsr _fs_stat
+    jmp irq_restore
+check_fs_close:
+    cmp #7                  ; SYS_FS_CLOSE
+    bne check_fs_seek
+    jsr _fs_close
+    jmp irq_restore
+check_fs_seek:
+    cmp #8                  ; SYS_FS_SEEK
+    bne check_fs_read
+    jsr _fs_seek
+    jmp irq_restore
+check_fs_read:
+    cmp #9                  ; SYS_FS_READ
+    bne check_fs_getbyte
+    jsr _fs_read
+    jmp irq_restore
+check_fs_getbyte:
+    cmp #10                 ; SYS_FS_GETBYTE
+    bne irq_restore
+    jsr _fs_getbyte
 irq_restore:
     pla
     tay
