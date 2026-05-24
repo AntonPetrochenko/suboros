@@ -3,6 +3,9 @@
 #include "syscall.h"
 #include "fs.h"
 
+extern unsigned char no_sched;    /* ZP flag: non-zero = suppress NMI scheduler */
+#pragma zpsym ("no_sched")
+
 unsigned char      prg_bank_cur;
 SuborFS1Mount      fs_mount_table[FS_MAX_MOUNTS];
 SuborFS1Handle     fs_handle_table[FS_MAX_MOUNTS];
@@ -65,10 +68,18 @@ static void banked_copy(unsigned char  bank,
 
     saved = prg_bank_cur;
     __asm__("sei");
+    /* Guard the MMC1 5-write sequence against NMI scheduler preemption.
+       prg_bank_cur is updated before each write so a latent NMI sees the
+       correct bank and can save/restore it cleanly. */
+    no_sched = 1;
+    prg_bank_cur = bank;
     mmc1_write_reg(0xE000, bank);
+    no_sched = 0;           /* copy itself is safe to preempt */
     while (n--) *dest++ = *s++;
-    mmc1_write_reg(0xE000, saved);
+    no_sched = 1;
     prg_bank_cur = saved;
+    mmc1_write_reg(0xE000, saved);
+    no_sched = 0;
     __asm__("cli");
 }
 

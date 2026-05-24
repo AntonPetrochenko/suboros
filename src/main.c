@@ -1,6 +1,8 @@
 #include "nes.h"
 #include "syscall.h"
 #include "fs.h"
+#include "proc.h"
+#include "alloc.h"
 
 #define VERSION 5
 #define TOSTR_(x) #x
@@ -15,7 +17,6 @@ static unsigned char joy1_held;
 static unsigned char joy1_prev;
 unsigned char joy1_pressed;
 
-extern const unsigned char ascii_chr_data[];
 
 static const unsigned char palette_data[32] = {
     0x0F, 0x00, 0x10, 0x30,
@@ -32,15 +33,30 @@ static void ppu_wait_vblank(void) {
     while (!(PPU_STATUS & 0x80));
 }
 
-static void chr_load(unsigned int vram_addr,
-                     const unsigned char *src,
-                     unsigned int count) {
+static void load_chr_from_fs(void) {
+    static unsigned char chr_va[8];
+    static const char chr_name[] = "CHR.BIN";
+    unsigned int i;
+
+    sc_p0 = 0;
+    PTR_UNPACK(chr_name, sc_p1, sc_p2);
+    PTR_UNPACK(chr_va,   sc_p3, sc_p4);
+    fs_open();
+    if (sc_rv0 == FS_HANDLE_EMPTY) return;
+
     (void)PPU_STATUS;
-    PPU_ADDR = (unsigned char)(vram_addr >> 8);
-    PPU_ADDR = (unsigned char)vram_addr;
-    while (count--) {
-        PPU_DATA = *src++;
+    PPU_ADDR = 0x00;
+    PPU_ADDR = 0x00;
+
+    for (i = 0; i < 8192; i++) {
+        PTR_UNPACK(chr_va, sc_p0, sc_p1);
+        fs_getbyte();
+        if (sc_rv1 != 0) break;
+        PPU_DATA = sc_rv0;
     }
+
+    PTR_UNPACK(chr_va, sc_p0, sc_p1);
+    fs_close();
 }
 
 static void load_palette(void) {
@@ -168,6 +184,13 @@ static void browser_draw_all(unsigned char sel) {
         browser_draw_line(i, i == sel);
 }
 
+static unsigned char is_prg_file(const char *name) {
+    unsigned char i;
+    for (i = 0; i < FS_NAME_LEN && name[i]; i++);
+    if (i < 3) return 0;
+    return name[i-3] == 'P' && name[i-2] == 'R' && name[i-1] == 'G';
+}
+
 static void view_file(unsigned char slot, const char *name) {
     unsigned char va[8];
     unsigned char c;
@@ -216,6 +239,8 @@ void main(void) {
     volatile unsigned char *apu = (volatile unsigned char *)0x4000;
 
     fs_init();
+    proc_init();
+    alloc_init();
 
     /* Mount any ROM filesystems embedded by tools/mkfs.py. */
     {
@@ -244,7 +269,7 @@ void main(void) {
 
     PPU_MASK = 0;
 
-    chr_load(0x0000, ascii_chr_data, 8192);
+    load_chr_from_fs();
     load_palette();
     ppu_clear_nt0();
 
@@ -363,7 +388,20 @@ void main(void) {
                 }
             }
             if ((joy1_pressed & BTN_A) && browser_file_count > 0) {
-                view_file(browser_files[sel].slot, browser_files[sel].name);
+                if (is_prg_file(browser_files[sel].name)) {
+                    static unsigned char err_buf[5];
+                    SC_START_PROCESS(browser_files[sel].slot,
+                                     browser_files[sel].name);
+                    if (sc_rv0 == 0xFF) {
+                        err_buf[0] = 'E';
+                        err_buf[1] = hex_nibble(sc_rv1 >> 4);
+                        err_buf[2] = hex_nibble(sc_rv1);
+                        err_buf[3] = 0;
+                        SC_PRINT(0, 29, err_buf);
+                    }
+                } else {
+                    view_file(browser_files[sel].slot, browser_files[sel].name);
+                }
             }
         }
     }

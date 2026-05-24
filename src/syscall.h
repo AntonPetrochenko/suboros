@@ -1,9 +1,16 @@
 #ifndef SYSCALL_H
 #define SYSCALL_H
 
-#define SYS_PUT_STRING   0
-#define SYS_BEEP         1
-#define SYS_SET_PRG_BANK 2
+#define SYS_PUT_STRING    0
+#define SYS_BEEP          1
+#define SYS_SET_PRG_BANK  2
+
+#define SYS_START_PROCESS 11
+#define SYS_IPC_WRITE     12
+#define SYS_IPC_GET       13
+#define SYS_EXIT_PROCESS  14
+#define SYS_ALLOC         15
+#define SYS_FREE          16
 
 /* Syscall registers in zero page.
    Caller fills sc_num and sc_p0..p5 before BRK.

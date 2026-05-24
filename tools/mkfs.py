@@ -82,9 +82,16 @@ class Filesystem:
         self.slot  = slot
         self.files: list[FileEntry] = []
 
+def is_prg_file(fs_name: str) -> bool:
+    """True if the FS name ends with 'PRG' (executable file)."""
+    return len(fs_name) >= 3 and fs_name[-3:] == "PRG"
+
+
 def pack_all(filesystems: list) -> dict:
     """
-    Pack file data from all filesystems sequentially into banks 0-5.
+    Pack file data from all filesystems sequentially into banks 0-6.
+    PRG files are always aligned to a bank boundary (first extent at $8000)
+    and must not exceed BANK_SIZE bytes.
     Returns {bank_num: bytearray} for each bank that has data.
     Also fills in .extents on every FileEntry.
     """
@@ -97,6 +104,17 @@ def pack_all(filesystems: list) -> dict:
             data     = fe.data
             pos      = 0
             extents  = []
+
+            # PRG executables must start at the beginning of a bank.
+            if is_prg_file(fe.name):
+                if len(data) > BANK_SIZE:
+                    raise ValueError(
+                        f"PRG file '{fe.name}' is {len(data)} bytes, "
+                        f"exceeding the {BANK_SIZE}-byte bank limit."
+                    )
+                if offset != 0:
+                    bank  += 1    # skip remainder of current bank
+                    offset = 0
 
             while pos < len(data):
                 if bank > FS_BANK_LAST:

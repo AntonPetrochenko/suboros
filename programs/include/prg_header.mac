@@ -1,0 +1,20 @@
+; prg_header.mac — PRG_HEADER_ROM macro for SuborOS executables.
+;
+; Emit the 8-byte PRG header at the very start of the ROM bank ($8000).
+; Your code entry point must follow immediately (at $8008).
+;
+; Usage:
+;   .include "../include/prg_header.mac"
+;
+;   .segment "CODE"
+;       PRG_HEADER_ROM          ; emits 8 bytes at $8000
+;   entry:                      ; now at $8008
+;       ; ... your code ...
+
+.macro PRG_HEADER_ROM
+    .byte $50, $52      ; magic 'P','R'
+    .byte 1             ; version
+    .byte 0             ; flags: no relocation table
+    .word 8             ; entry_offset = 8  (code starts at $8008)
+    .word 0             ; reloc_table_size = 0
+.endmacro
