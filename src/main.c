@@ -325,6 +325,8 @@ void main(void) {
     }
     } /* end if (joy1_held) */
 
+    SC_BEEP(0xFF, 127);
+
     browser_enumerate();
 
     /* Clear screen and draw the file browser. */

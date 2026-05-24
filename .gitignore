@@ -1,3 +1,2 @@
 build/
-tools/
-!tools/mkfs.py
+tools/cc65/

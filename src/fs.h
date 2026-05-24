@@ -83,9 +83,6 @@ extern SuborFS1Handle fs_handle_table[FS_MAX_MOUNTS];
    Lives in RODATA (bank 7 fixed), always accessible without bank switching. */
 extern const unsigned char fs_rom_mount_table[];
 
-/* Call a void function residing in the OS extended bank (bank 6).
-   Saves the current switchable bank, switches to bank 6, calls fn, restores. */
-void __fastcall__ bank6_call(void (*fn)(void));
 
 #define FS_MOUNT_TABLE  fs_mount_table
 #define FS_HANDLE_TABLE fs_handle_table

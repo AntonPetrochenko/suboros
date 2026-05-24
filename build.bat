@@ -32,9 +32,6 @@ if errorlevel 1 goto fail
 %CA65% -I "%SRC%" -o "%BUILD%\chr_data.o" "%SRC%\chr_data.asm"
 if errorlevel 1 goto fail
 
-%CA65% -I "%SRC%" -o "%BUILD%\farjmp.o"   "%SRC%\farjmp.asm"
-if errorlevel 1 goto fail
-
 %CA65% -o "%BUILD%\fs_rom_data.o" "%BUILD%\fs_rom_data.asm"
 if errorlevel 1 goto fail
 
@@ -66,7 +63,6 @@ echo Linking...
     "%BUILD%\startup.o"     ^
     "%BUILD%\nmi.o"         ^
     "%BUILD%\chr_data.o"    ^
-    "%BUILD%\farjmp.o"      ^
     "%BUILD%\fs_rom_data.o" ^
     "%BUILD%\main.o"        ^
     "%BUILD%\syscalls.o"    ^

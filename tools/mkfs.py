@@ -4,12 +4,12 @@ mkfs.py — SuborFS1 ROM image builder
 Usage: python tools/mkfs.py <in_fs_dir> <build_dir>
 
 Reads numbered subdirectories from <in_fs_dir> (0/, 1/, 2/, 3/) and packs
-their files into PRG ROM banks 0-5, generating a ca65 assembly file at
+their files into PRG ROM banks 0-6, generating a ca65 assembly file at
 <build_dir>/fs_rom_data.asm containing:
-  - File data in BANK{N} segments (banks 0-5, switchable at $8000-$BFFF)
+  - File data in BANK{N} segments (banks 0-6, switchable at $8000-$BFFF)
   - TOC entries and a ROM mount table in the RODATA segment (bank 7)
 
-Banks 6 and 7 are reserved for the OS and are never written.
+Bank 7 is reserved for fixed OS code and is never written.
 """
 
 import sys
@@ -17,7 +17,7 @@ import os
 
 # ---- Constants (must match fs.h) ----------------------------------------
 FS_BANK_FIRST  = 0        # first PRG bank available for FS data
-FS_BANK_LAST   = 5        # last PRG bank available (banks 6, 7 reserved for OS)
+FS_BANK_LAST   = 6        # last PRG bank available (bank 7 reserved for fixed OS code)
 BANK_SIZE      = 16384    # 16 KB per bank
 FS_MAX_MOUNTS  = 4        # max number of filesystems
 FS_NAME_LEN    = 8
