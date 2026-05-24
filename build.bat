@@ -11,6 +11,10 @@ set OUT=%BUILD%\suboros.nes
 
 if not exist "%BUILD%" mkdir "%BUILD%"
 
+echo Building ROM filesystem...
+python "%~dp0tools\mkfs.py" "%~dp0in_fs" "%BUILD%"
+if errorlevel 1 goto fail
+
 echo Assembling...
 
 %CA65% -I "%SRC%" -o "%BUILD%\header.o"   "%SRC%\header.asm"
@@ -26,6 +30,12 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 %CA65% -I "%SRC%" -o "%BUILD%\chr_data.o" "%SRC%\chr_data.asm"
+if errorlevel 1 goto fail
+
+%CA65% -I "%SRC%" -o "%BUILD%\farjmp.o"   "%SRC%\farjmp.asm"
+if errorlevel 1 goto fail
+
+%CA65% -o "%BUILD%\fs_rom_data.o" "%BUILD%\fs_rom_data.asm"
 if errorlevel 1 goto fail
 
 echo Compiling C...
@@ -51,14 +61,16 @@ if errorlevel 1 goto fail
 echo Linking...
 
 %LD65% -C "%CFG%" -o "%OUT%" ^
-    "%BUILD%\header.o"   ^
-    "%BUILD%\zp.o"       ^
-    "%BUILD%\startup.o"  ^
-    "%BUILD%\nmi.o"      ^
-    "%BUILD%\chr_data.o" ^
-    "%BUILD%\main.o"     ^
-    "%BUILD%\syscalls.o" ^
-    "%BUILD%\fs.o"       ^
+    "%BUILD%\header.o"      ^
+    "%BUILD%\zp.o"          ^
+    "%BUILD%\startup.o"     ^
+    "%BUILD%\nmi.o"         ^
+    "%BUILD%\chr_data.o"    ^
+    "%BUILD%\farjmp.o"      ^
+    "%BUILD%\fs_rom_data.o" ^
+    "%BUILD%\main.o"        ^
+    "%BUILD%\syscalls.o"    ^
+    "%BUILD%\fs.o"          ^
     "%~dp0tools\cc65\lib\none.lib"
 if errorlevel 1 goto fail
 

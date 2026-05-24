@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c build.bat)",
+      "PowerShell(.\\\\build.bat)"
+    ]
+  }
+}
