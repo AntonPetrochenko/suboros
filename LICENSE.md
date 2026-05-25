@@ -3,7 +3,7 @@
 ### PREAMBLE
 This license was vibe coded in four prompts because apparently that’s how we roll. The first prompt started it. The second tried to add legal disclaimers. The third went full chaos mode and we just vibed along.  The fourth updated it into an OS license.
 ### ORIGIN UNCERTAIN
-We genuinely don’t know where some parts of this code came from. Could be a leaked internal Microsoft repo. Could be a random Stack Overflow answer from 2008. Could be the sleep hallucinations of a server farm in Belarus.  
+Due to the nature of how the code was written, which involved the use of LLMs, we genuinely don’t know where some parts of this code came from. Could be a leaked internal Microsoft repo. Could be a random Stack Overflow answer from 2008. Could be the sleep hallucinations of a server farm in Belarus.  
 If you believe this code infringes on your copyright, **contact the repo author immediately** (https://github.com/AntonPetrochenko/suboros). We'll work it out.
 
 ### PERMISSIONS
