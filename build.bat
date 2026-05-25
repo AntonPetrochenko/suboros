@@ -68,6 +68,12 @@ if errorlevel 1 goto fail
 %CA65% -o "%BUILD%\alloc.o" "%BUILD%\alloc.s"
 if errorlevel 1 goto fail
 
+%CC65% -O -I "%SRC%" -o "%BUILD%\ppu.s" "%SRC%\ppu.c"
+if errorlevel 1 goto fail
+
+%CA65% -o "%BUILD%\ppu.o" "%BUILD%\ppu.s"
+if errorlevel 1 goto fail
+
 echo Linking...
 
 %LD65% -C "%CFG%" -o "%OUT%" ^
@@ -81,6 +87,7 @@ echo Linking...
     "%BUILD%\fs.o"          ^
     "%BUILD%\proc.o"        ^
     "%BUILD%\alloc.o"       ^
+    "%BUILD%\ppu.o"         ^
     "%~dp0tools\cc65\lib\none.lib"
 if errorlevel 1 goto fail
 

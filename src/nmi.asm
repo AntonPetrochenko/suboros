@@ -30,8 +30,10 @@
 .import _sys_alloc, _sys_free
 .import _proc_table, _proc_user_count
 .import _prg_bank_cur
+.import _ppu_queue
 .importzp _sc_num
 .importzp _sched_cur_pid, _sched_tmp, _sched_ptr, _no_sched
+.importzp _ppu_q_tail, _ppu_q_busy, _ppu_q_writes
 
 .export nmi_handler, irq_handler
 
@@ -51,6 +53,83 @@ PROC_FLAG_ACTIVE = $01
     tya
     pha
 
+    ; --- PPU queue drain ----------------------------------------------------
+    ; Drain the deferred PPU write queue while we are in VBlank.  Producers
+    ; outside the NMI handler enqueue COPY/FILL commands instead of touching
+    ; $2006/$2007 directly; we walk the buffer here and perform the actual
+    ; PPU writes.  The producer caps total PPU bytes per frame at
+    ; PPU_FRAME_BUDGET (ppu.h) so this loop finishes inside VBlank.
+    bit $2002                   ; reset write-toggle latch (clears bit 7 too)
+    lda _ppu_q_busy
+    bne drain_done              ; producer mid-enqueue; skip this frame
+    lda _ppu_q_tail
+    beq drain_done              ; queue empty
+
+    ldx #0                      ; X = byte cursor into ppu_queue
+drain_loop:
+    lda _ppu_queue, x
+    beq drain_finish            ; OP_END
+    cmp #1
+    beq do_copy
+    cmp #2
+    beq do_fill
+    jmp drain_finish            ; unknown opcode → bail out safely
+
+do_copy:
+    inx                         ; past opcode
+    lda _ppu_queue, x           ; addr hi
+    sta $2006
+    inx
+    lda _ppu_queue, x           ; addr lo
+    sta $2006
+    inx
+    lda _ppu_queue, x           ; len
+    sta _sched_tmp
+    inx
+copy_byte:
+    lda _ppu_queue, x
+    sta $2007
+    inx
+    dec _sched_tmp
+    bne copy_byte
+    jmp drain_loop
+
+do_fill:
+    inx                         ; past opcode
+    lda _ppu_queue, x           ; addr hi
+    sta $2006
+    inx
+    lda _ppu_queue, x           ; addr lo
+    sta $2006
+    inx
+    lda _ppu_queue, x           ; len
+    sta _sched_tmp
+    inx
+    lda _ppu_queue, x           ; value
+    inx                         ; advance past value byte for next command
+fill_byte:
+    sta $2007
+    dec _sched_tmp
+    bne fill_byte
+    jmp drain_loop
+
+drain_finish:
+    lda #0
+    sta _ppu_q_tail
+    sta _ppu_q_writes
+    sta _ppu_queue              ; ensure ppu_queue[0] = OP_END for safety
+
+    ; Restore PPU state so the next frame renders with NT base 0, scroll
+    ; (0,0).  PPU_ADDR writes during the drain clobbered t's NT-base and
+    ; fine-Y bits; PPU_SCROLL writes also clear coarse X/Y.
+    lda #$80                    ; CTRL_NMI_ON, NT base 0, VRAM inc +1
+    sta $2000
+    lda #0
+    sta $2005
+    sta $2005
+
+drain_done:
+    ; --- Frame counter / nmi_ready -----------------------------------------
     inc _frame_count
     bne :+
     inc _frame_count+1

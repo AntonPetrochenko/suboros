@@ -3,6 +3,10 @@
 #include "fs.h"
 #include "proc.h"
 #include "alloc.h"
+#include "ppu.h"
+
+extern unsigned char no_sched;
+#pragma zpsym ("no_sched")
 
 #define VERSION 5
 #define TOSTR_(x) #x
@@ -11,8 +15,6 @@
 volatile unsigned char nmi_ready;
 volatile unsigned int  frame_count;
 
-static unsigned char ppu_ctrl_shadow;
-static unsigned char ppu_mask_shadow;
 static unsigned char joy1_held;
 static unsigned char joy1_prev;
 unsigned char joy1_pressed;
@@ -36,7 +38,10 @@ static void ppu_wait_vblank(void) {
 static void load_chr_from_fs(void) {
     static unsigned char chr_va[8];
     static const char chr_name[] = "CHR.BIN";
-    unsigned int i;
+    static unsigned char buf[256];
+    unsigned int  remaining;
+    unsigned int  got;
+    unsigned char j;
 
     sc_p0 = 0;
     PTR_UNPACK(chr_name, sc_p1, sc_p2);
@@ -48,11 +53,28 @@ static void load_chr_from_fs(void) {
     PPU_ADDR = 0x00;
     PPU_ADDR = 0x00;
 
-    for (i = 0; i < 8192; i++) {
+    /* Bulk-read 256 bytes at a time and slam them into PPU_DATA.  NMI and
+       rendering are both off at this point in boot, so direct writes are
+       safe and far faster than per-byte fs_getbyte syscalls. */
+    remaining = 8192;
+    while (remaining) {
         PTR_UNPACK(chr_va, sc_p0, sc_p1);
-        fs_getbyte();
-        if (sc_rv1 != 0) break;
-        PPU_DATA = sc_rv0;
+        PTR_UNPACK(buf,    sc_p2, sc_p3);
+        sc_p4 = 0;
+        sc_p5 = 1;                  /* request 256 bytes */
+        fs_read();
+        got = (unsigned int)sc_rv1 << 8 | sc_rv0;
+        if (got == 0) break;
+        if (got == 256) {
+            /* Full chunk: write all 256 with an 8-bit wrap-around loop. */
+            j = 0;
+            do { PPU_DATA = buf[j]; j++; } while (j != 0);
+            remaining -= 256;
+        } else {
+            /* Short read at EOF (got <= 255). */
+            for (j = 0; j < (unsigned char)got; j++) PPU_DATA = buf[j];
+            break;
+        }
     }
 
     PTR_UNPACK(chr_va, sc_p0, sc_p1);
@@ -69,6 +91,9 @@ static void load_palette(void) {
     }
 }
 
+/* Direct nametable-0 clear — caller MUST have rendering disabled
+   (PPU_MASK = 0).  Used at boot and just before enabling NMI; runtime
+   clears go through ppu_q_fill so the queue drainer handles them. */
 static void ppu_clear_nt0(void) {
     unsigned int i;
     (void)PPU_STATUS;
@@ -98,14 +123,18 @@ static unsigned char hex_nibble(unsigned char n) {
 
 /* Write a 5-bit value to an MMC1 register via the serial shift register.
    The register is chosen by the address range: $8000=Control, $A000=CHR0,
-   $C000=CHR1, $E000=PRG.  No NMI must fire between the five writes. */
+   $C000=CHR1, $E000=PRG.  Wraps the five writes in _no_sched so the NMI
+   scheduler (which itself issues MMC1 writes to $E000) cannot corrupt the
+   shift sequence by firing between two of our writes. */
 void mmc1_write_reg(unsigned int addr, unsigned char val) {
     volatile unsigned char *p = (volatile unsigned char *)addr;
+    no_sched = 1;
     *p = val & 1; val >>= 1;
     *p = val & 1; val >>= 1;
     *p = val & 1; val >>= 1;
     *p = val & 1; val >>= 1;
     *p = val & 1;
+    no_sched = 0;
 }
 
 /* ---- File browser ---- */
@@ -193,44 +222,51 @@ static unsigned char is_prg_file(const char *name) {
 
 static void view_file(unsigned char slot, const char *name) {
     unsigned char va[8];
-    unsigned char c;
+    unsigned char line[32];
     unsigned char x = 0, y = 0;
-    char buf[2];
+    static const char done_msg[] = "DONE";
 
-    PPU_MASK = 0;
-    ppu_clear_nt0();
-    PPU_MASK = ppu_mask_shadow;
+    /* Clear the screen through the queue.  Drainer handles it across a
+       handful of frames; rendering stays on so no flash. */
+    ppu_q_fill(0x2000, 0, 1024);
+    ppu_q_flush();
 
     SC_FS_OPEN(slot, name, va);
     if (sc_rv0 == FS_SLOT_EMPTY) { while (1); }
 
-    buf[1] = '\0';
     while (1) {
-        while (!nmi_ready);
-        nmi_ready = 0;
+        unsigned char n = 0;
 
-        SC_FS_GETBYTE(va);
+        /* Fill a one-row line buffer (up to 32 chars) — but flush at end-of
+           line, end-of-file, OR if we've consumed the per-frame byte budget. */
+        while (n < (unsigned char)(32 - x)) {
+            SC_FS_GETBYTE(va);
+            if (sc_rv1 == FS_ERR_EOF) break;
+            line[n++] = sc_rv0;
+        }
+
+        if (n > 0) {
+            ppu_q_copy(0x2000u + (unsigned int)y * 32u + x, line, n);
+            x += n;
+            if (x >= 32) {
+                x = 0;
+                y++;
+                if (y >= 30) {
+                    /* Wrap back to top — clear so the new page is fresh. */
+                    ppu_q_flush();
+                    ppu_q_fill(0x2000, 0, 1024);
+                    ppu_q_flush();
+                    y = 0;
+                }
+            }
+        }
+
         if (sc_rv1 == FS_ERR_EOF) break;
-        c = sc_rv0;
-
-        if (x == 0 && y == 0) {
-            PPU_MASK = 0;
-            ppu_clear_nt0();
-            PPU_MASK = ppu_mask_shadow;
-        }
-
-        buf[0] = (char)c;
-        SC_PRINT(x, y, buf);
-
-        x++;
-        if (x >= 32) {
-            x = 0;
-            y++;
-            if (y >= 30) y = 0;
-        }
     }
 
-    SC_PRINT(0, 29, "DONE");
+    ppu_q_flush();
+    ppu_q_copy(0x2000u + 29u * 32u, (const unsigned char *)done_msg, 4);
+    ppu_q_flush();
     while (1);
 }
 
@@ -241,6 +277,7 @@ void main(void) {
     fs_init();
     proc_init();
     alloc_init();
+    ppu_q_init();
 
     /* Mount any ROM filesystems embedded by tools/mkfs.py. */
     {
@@ -255,8 +292,6 @@ void main(void) {
 
     PPU_CTRL = 0;
     PPU_MASK = 0;
-    ppu_ctrl_shadow = 0;
-    ppu_mask_shadow = 0;
 
     for (i = 0; i <= 0x10; i++) {
         apu[i] = 0;
@@ -267,24 +302,27 @@ void main(void) {
     ppu_wait_vblank();
     ppu_wait_vblank();
 
-    PPU_MASK = 0;
-
+    /* Rendering and NMI both off: do the big direct PPU loads. */
     load_chr_from_fs();
     load_palette();
     ppu_clear_nt0();
+
+    /* Reset scroll latch before enabling NMI + rendering. */
+    (void)PPU_STATUS;
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+
+    /* Enable NMI and rendering NOW so that SC_PRINT (queue-based) works
+       from the very first banner line.  proc_user_count is still 0 so the
+       NMI scheduler is a no-op; the drainer is what we care about. */
+    ppu_wait_vblank();
+    PPU_CTRL = CTRL_NMI_ON;
+    PPU_MASK = MASK_SHOW_BG | MASK_LCLIP_BG;
 
     SC_PRINT(1, 1, "> CHR OK");
     SC_PRINT(1, 2, "> PRG RAM ");
     SC_PRINT(1, 3, "> EXT ");
     SC_PRINT(1, 4, "> VER " TOSTR(VERSION));
-
-    /* Set scroll and enable BG so the labels above are visible. */
-    (void)PPU_STATUS;
-    PPU_SCROLL = 0;
-    PPU_SCROLL = 0;
-    PPU_CTRL = 0;
-    ppu_wait_vblank();
-    PPU_MASK = MASK_SHOW_BG;
 
     SC_BEEP(0xFF, 127);
 
@@ -354,15 +392,10 @@ void main(void) {
 
     browser_enumerate();
 
-    /* Clear screen and draw the file browser. */
-    PPU_MASK = 0;
-    ppu_clear_nt0();
-    PPU_MASK = MASK_SHOW_BG;
-
-    ppu_ctrl_shadow = CTRL_NMI_ON;
-    PPU_CTRL = CTRL_NMI_ON;
-    ppu_mask_shadow = MASK_SHOW_BG | MASK_LCLIP_BG;
-    PPU_MASK = ppu_mask_shadow;
+    /* Clear screen through the queue (rendering stays on, no flash) and
+       draw the file browser. */
+    ppu_q_fill(0x2000, 0, 1024);
+    ppu_q_flush();
 
     {
         unsigned char sel = 0;

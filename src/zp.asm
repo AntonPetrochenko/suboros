@@ -44,6 +44,13 @@ _no_sched:      .res 1   ; non-zero = do not context-switch this NMI frame
 
 ; User-program scratch ZP (not used by OS C code — safe across context switches).
 ; User programs must use ONLY these for ZP storage; never touch CC65 runtime vars.
+; ABI-stable addresses: do not move; user .prg files hardcode them.
 .export _usr_ptr, _usr_tmp
 _usr_ptr: .res 2         ; 2-byte ZP pointer for indirect addressing ($2A-$2B)
 _usr_tmp: .res 4         ; general scratch bytes ($2C-$2F)
+
+.exportzp _ppu_q_tail, _ppu_q_busy, _ppu_q_writes
+
+_ppu_q_tail:    .res 1   ; bytes used in ppu_queue ($00 = empty); NMI drains
+_ppu_q_busy:    .res 1   ; non-zero = producer mid-enqueue; NMI skips drain
+_ppu_q_writes:  .res 1   ; PPU bytes scheduled this frame; NMI resets to 0
