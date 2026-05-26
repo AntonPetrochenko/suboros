@@ -1,5 +1,5 @@
-SchizoOS - OS for the Subor Famiclone, because we have time to burn and money to waste on Claude tokens.
-========
+SchizOS - OS for the Subor Famiclone, because we have time to burn and money to waste on Claude tokens.
+=======
 
 ```
 Note: LLMs WERE used in creation of this project, because heck no we aren't writing a fully fledged OS for a shitass famiclone manually. 
