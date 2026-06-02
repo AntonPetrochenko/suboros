@@ -1,6 +1,6 @@
 SchizOS - OS for the Subor Famiclone, because we have time to burn and money to waste on Claude tokens.
 =======
-
+[![blazingly fast](https://www.blazingly.fast/api/badge.svg?repo=AntonPetrochenko%2Fsuboros)](https://www.blazingly.fast)
 ```
 Note: LLMs WERE used in creation of this project, because heck no we aren't writing a fully fledged OS for a shitass famiclone manually. 
 We ARE doing the actual OS architecture ourselves though, but this thing speeds it up menial tasks. And burns tokens like crazy.
